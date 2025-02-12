@@ -57,6 +57,8 @@ SVG_STYLE = {
         ("GBS", "dimgray", "darkgray", 0.5),
         ("GBP", "mintcream", "lightcyan", 0.5),
         ("GBL", "royalblue", "royalblue", 0.4),
+        ("GP5", "gold", "gold", 0.4),
+        ("GP4", "lightseagreen", "lightseagreen", 0.4),
         ("GP3", "chocolate", "chocolate", 0.4),
         ("GP2", "green", "green", 0.4),
         ("GTL", "indianred", "indianred", 0.4),

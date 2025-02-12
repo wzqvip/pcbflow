@@ -5,6 +5,7 @@
 import os
 import glob
 
+from math import *
 import shapely.geometry as sg
 import shapely.affinity as sa
 import shapely.ops as so
@@ -63,6 +64,8 @@ class KiCadPart(PCBPart):
             width = self.board.drc.silk_width
             if line["width"] > 0:
                 width = line["width"]
+            if width==0:
+                print("warning: line width is zero")
             g = sg.LineString([p0.xy, p1.xy]).buffer(width / 2)
             self._add_obj_to_layer(g, line["layers"][0])
 
@@ -74,17 +77,22 @@ class KiCadPart(PCBPart):
             xyc = self.center.xy
             for c in poly["coords"]:
                 coords.append((xyc[0] + c[0], xyc[1] + c[1]))
-            g = sg.Polygon(coords).buffer(width / 2)
+            if poly['fill']:
+                g = sg.Polygon(coords).buffer(width/2)
+            else:
+                g = sg.Polygon(coords).exterior.buffer(width/2)
             self._add_obj_to_layer(g, poly["layer"])
 
         for circle in self.circles:
             width = self.board.drc.silk_width
             if circle["width"] > 0:
                 width = circle["width"]
-            xyc = self.center.xy
-            xyc = (xyc[0] + circle["center"][0], xyc[1] + circle["center"][1])
+            xyc=self.center.copy().goxy(*circle["center"]).xy
             gc = sg.Point(xyc).buffer(circle["diameter"] / 2)
-            g = sg.Polygon(gc.exterior.coords).buffer(width)
+            if circle['fill']:
+                g = sg.Polygon(gc.exterior.coords).buffer(width/2)
+            else:
+                g = gc.exterior.buffer(width/2)
             self._add_obj_to_layer(g, circle["layer"])
 
         for pad in self.smd_pads:
@@ -117,8 +125,9 @@ class KiCadPart(PCBPart):
 
         if len(self.labels) > 0:
             for label in self.labels:
-                xyc = self.center.xy
-                xy = (xyc[0] + label["xy"][0], xyc[1] + label["xy"][1])
+                #xyc = self.center.xy
+                xy=self.center.copy().goxy(*label["xy"]).xy
+                #xy = (xyc[0] + label["xy"][0], xyc[1] + label["xy"][1])
                 self.board.add_text(
                     xy,
                     self.id,
@@ -150,6 +159,7 @@ class KiCadPart(PCBPart):
 
     def _parse_fp_poly(self, items):
         coords = []
+        fill=True
         for e in items:
             if isinstance(e, dict):
                 if "pts" in e:
@@ -157,15 +167,23 @@ class KiCadPart(PCBPart):
                         coords.append((float(pt[2]), -float(pt[3])))
                 elif "width" in e:
                     width = float(e["width"][0])
+                elif "stroke" in e:
+                    for ln,key,val in e['stroke']:
+                        if "width" in key:
+                            width=float(val)
+                elif "fill" in e:
+                    if 'none' in e['fill']:
+                        fill=False    
                 elif "layer" in e:
                     layer = self._map_layers(e["layer"])[0]
-        self.polys.append({"coords": coords, "width": width, "layer": layer})
+        self.polys.append({"coords": coords, "width": width, "layer": layer, "fill":fill})
 
     def _parse_fp_circle(self, items):
         center = (0, 0)
         width = 0
         diameter = 0
         layers = []
+        fill=True
         for e in items:
             if isinstance(e, dict):
                 if "center" in e:
@@ -174,13 +192,20 @@ class KiCadPart(PCBPart):
                 if "end" in e:
                     pt = e["end"]
                     end = (float(pt[0]), -float(pt[1]))
-                    diameter = max(abs(center[0] - end[0]), abs(center[1] - end[1]))
+                    diameter = 2*hypot(center[0] - end[0], center[1] - end[1])
                 elif "width" in e:
                     width = float(e["width"][0])
+                elif "stroke" in e:
+                    for ln,key,val in e['stroke']:
+                        if key=="width":
+                            width=float(val)
+                elif "fill" in e:
+                    if 'none' in e['fill']:
+                        fill=False
                 elif "layer" in e:
                     layer = self._map_layers(e["layer"])[0]
         self.circles.append(
-            {"center": center, "diameter": diameter, "width": width, "layer": layer}
+            {"center": center, "diameter": diameter, "width": width, "layer": layer, "fill" : fill}
         )
 
     def _parse_fp_line(self, items):
@@ -199,6 +224,10 @@ class KiCadPart(PCBPart):
                     coords.append((float(coord[0]), -float(coord[1])))
                 elif "width" in e:
                     width = float(e["width"][0])
+                elif "stroke" in e:
+                    for ln,key,val in e['stroke']:
+                        if key=="width":
+                            width=float(val)
                 elif "layer" in e:
                     layers = self._map_layers(e["layer"])
         if len(layers) > 0:
@@ -225,6 +254,23 @@ class KiCadPart(PCBPart):
             )
 
         elif items[1] == "thru_hole":
+            shape = items[2]
+            for e in items[3:]:
+                if isinstance(e, dict):
+                    if "at" in e:
+                        xy = float(e["at"][0]), -float(e["at"][1])
+                    elif "size" in e:
+                        size = float(e["size"][0]), float(e["size"][1])
+                    # TODO: support oval shaped drill, i.e. slot
+                    elif "drill" in e:
+                        try:
+                            drill = float(e["drill"][0])
+                        except:
+                            pass
+            self.pin_pads.append(
+                {"name": name, "xy": xy, "size": size, "drill": drill, "shape": shape}
+            )
+        elif items[1] == "np_thru_hole":
             shape = items[2]
             for e in items[3:]:
                 if isinstance(e, dict):

@@ -17,7 +17,7 @@ import shapely.ops as so
 import math
 
 from pcbflow import *
-
+from pcbflow.route import *
 
 class Board:
     def __init__(self, size=(80, 50)):
