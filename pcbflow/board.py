@@ -593,7 +593,8 @@ class Board:
                         vendor_c = p.source[vendor]
                     else:
                         (vendor, vendor_c) = ("", "")
-                    attr = (rank.index(f), p.mfr + p.val, p.footprint, vendor, vendor_c)
+                    # attr = (rank.index(f), p.mfr + p.val, p.footprint, vendor, vendor_c)
+                    attr = (rank.index(f) if f in rank else -1, p.mfr + p.val, p.footprint, vendor, vendor_c)
                     parts[attr].append(p.id)
 
         with open(fn + "-bom.csv", "wt") as f:
